@@ -38,15 +38,18 @@ import org.junit.rules.TemporaryFolder;
 public class RepoInitValidatorTest {
 
     private static final ArtifactId NODETYPES_BUNDLE_ID = new ArtifactId("test.group", "nodetypes", "1.0.0", null, "jar");
+    private static final ArtifactId NODETYPES_CONTENT_PACKAGE_ID = new ArtifactId("test.group", "nodetypes-package", "1.0.0", null, "zip");
 
     @Rule
     public TemporaryFolder temporaryFolder = new TemporaryFolder();
 
     private Path nodetypesJar;
+    private Path nodetypesContentPackage;
 
     @Before
     public void setUp() throws Exception {
         this.nodetypesJar = createNodeTypesJar();
+        this.nodetypesContentPackage = createNodeTypesContentPackage();
     }
 
     @Test
@@ -59,6 +62,35 @@ public class RepoInitValidatorTest {
     public void testFailureMissingCreatePath() throws Exception {
         final URL repoinitUrl = getClass().getResource("/repoinit/fail.txt");
         testRepoInitFile(repoinitUrl);
+    }
+
+    @Test
+    public void testSuccessWithNodeTypesFromContentPackage() throws Exception {
+        final URL repoinitUrl = getClass().getResource("/repoinit/success.txt");
+        assertNotNull("repoinit/success.txt test resource must exist", repoinitUrl);
+        final String repoinitText = Files.readString(Path.of(repoinitUrl.toURI()), StandardCharsets.UTF_8);
+
+        final Feature feature = new Feature(new ArtifactId("test.group", "feature", "1.0.0", "aggregated-author", "slingosgifeature"));
+        final Extension repoinitExtension = new Extension(ExtensionType.TEXT, Extension.EXTENSION_NAME_REPOINIT, ExtensionState.REQUIRED);
+        repoinitExtension.setText(repoinitText);
+        feature.getExtensions().add(repoinitExtension);
+
+        final Extension contentPackagesExtension = new Extension(ExtensionType.ARTIFACTS, Extension.EXTENSION_NAME_CONTENT_PACKAGES, ExtensionState.REQUIRED);
+        contentPackagesExtension.getArtifacts().add(new Artifact(NODETYPES_CONTENT_PACKAGE_ID));
+        feature.getExtensions().add(contentPackagesExtension);
+
+        final RepoInitValidator validator = new RepoInitValidator(id -> {
+            if (!NODETYPES_CONTENT_PACKAGE_ID.equals(id)) {
+                return null;
+            }
+            try {
+                return this.nodetypesContentPackage.toUri().toURL();
+            } catch (final java.net.MalformedURLException e) {
+                throw new RuntimeException(e);
+            }
+        }, true);
+
+        validator.validate(feature);
     }
 
     private void testRepoInitFile(URL repoinitUrl) throws Exception {
@@ -101,6 +133,24 @@ public class RepoInitValidatorTest {
             }
         }
         return jarPath;
+    }
+
+    private Path createNodeTypesContentPackage() throws Exception {
+        final URL nodetypesUrl = getClass().getResource("/nodetypes");
+        assertNotNull("nodetypes test resources must exist", nodetypesUrl);
+
+        final Path zipPath = this.temporaryFolder.newFile("nodetypes-package.zip").toPath();
+        try (JarOutputStream jarOutputStream = new JarOutputStream(new FileOutputStream(zipPath.toFile()))) {
+            try (Stream<Path> cndFiles = Files.list(Path.of(nodetypesUrl.toURI()))) {
+                for (final Path cndFile : cndFiles.filter(path -> path.toString().endsWith(".cnd")).collect(Collectors.toList())) {
+                    final String entryName = RepoInitValidator.META_INF_VAULT + cndFile.getFileName();
+                    jarOutputStream.putNextEntry(new JarEntry(entryName));
+                    jarOutputStream.write(Files.readAllBytes(cndFile));
+                    jarOutputStream.closeEntry();
+                }
+            }
+        }
+        return zipPath;
     }
 
 }

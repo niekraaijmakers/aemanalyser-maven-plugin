@@ -110,6 +110,7 @@ public class RepoInitValidator {
                         .build())
                 .createRepository();
         final Session session = repository.login(new SimpleCredentials("admin", "admin".toCharArray()));
+        
         try {
             registerNodeTypes(session, feature);
 
@@ -209,11 +210,15 @@ public class RepoInitValidator {
                 }
             }
         } catch (RuntimeException ex){
-            if(LOGGER.isDebugEnabled() || verbose){
+            if(isVerboseLogging()){
                 LOGGER.warn("Error loading artifact from bundle {} : {}", artifact.getId().toString(), ex.getMessage());
             }
         }
      
+    }
+
+    private boolean isVerboseLogging() {
+        return LOGGER.isDebugEnabled() || verbose;
     }
 
     private void collectRegisterNodeTypeStreamsFromContentPackage(final Artifact artifact, Consumer<NamedByteArrayInputStream> addRegisterNodeTypeInputStream)
@@ -236,7 +241,7 @@ public class RepoInitValidator {
                 }
             }
         } catch (RuntimeException ex) {
-            if(LOGGER.isDebugEnabled() || verbose){
+            if(isVerboseLogging()){
                 LOGGER.warn("Error loading artifact from content package {} : {}", artifact.getId().toString(), ex.getMessage());
             }
         }
