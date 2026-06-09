@@ -61,6 +61,7 @@ import org.slf4j.LoggerFactory;
 public class RepoInitValidator {
 
     public static final String SLING_INF_NODE_TYPES = "SLING-INF/nodetypes";
+    public static final String META_INF_VAULT = "META-INF/vault/";
 
     private static final ConfigurationParameters CONFIGURATION_PARAMETERS = ConfigurationParameters.of(Map.of(
             "groupsPath", "/home/groups",
@@ -70,17 +71,18 @@ public class RepoInitValidator {
     private static final int RETRY_UPPER_LIMIT_MULTIPLICATION_FACTOR = 4;
 
     private final ArtifactProvider artifactProvider;
-
+    private final boolean verbose;
     /**
      * Constructor
      * @param artifactProvider provides the maven artifacts
      */
-    public RepoInitValidator(ArtifactProvider artifactProvider ) {
+    public RepoInitValidator(ArtifactProvider artifactProvider, boolean verbose) {
         this.artifactProvider = artifactProvider;
       
         if (this.artifactProvider == null) {
             throw new IllegalStateException("ArtifactProvider must be set before validating repoinit");
         }
+        this.verbose = verbose;
     }
 
     /**
@@ -176,6 +178,14 @@ public class RepoInitValidator {
         for (final Artifact artifact : feature.getBundles()) {
             collectRegisterNodeTypeStreamsFromBundle(artifact, nodeTypeInputStreamsDequeue::add);
         }
+
+        final Extension contentPackages = feature.getExtensions().getByName(Extension.EXTENSION_NAME_CONTENT_PACKAGES);
+        if (contentPackages != null) {
+            for (final Artifact artifact : contentPackages.getArtifacts()) {
+                collectRegisterNodeTypeStreamsFromContentPackage(artifact, nodeTypeInputStreamsDequeue::add);
+            }
+        }
+
         return nodeTypeInputStreamsDequeue;
     }
 
@@ -188,6 +198,7 @@ public class RepoInitValidator {
             }
             try (InputStream inputStream = url.openStream();
                 JarInputStream jarInputStream = new JarInputStream(inputStream)) {
+              
                 JarEntry nextJarEntry;
                 while ((nextJarEntry = jarInputStream.getNextJarEntry()) != null) {
                     final String name = nextJarEntry.getName();
@@ -198,9 +209,37 @@ public class RepoInitValidator {
                 }
             }
         } catch (RuntimeException ex){
-            LOGGER.error("Error loading artifact {} : {}", artifact.getId().toString(), ex.getMessage());
+            if(LOGGER.isDebugEnabled() || verbose){
+                LOGGER.warn("Error loading artifact from bundle {} : {}", artifact.getId().toString(), ex.getMessage());
+            }
         }
      
+    }
+
+    private void collectRegisterNodeTypeStreamsFromContentPackage(final Artifact artifact, Consumer<NamedByteArrayInputStream> addRegisterNodeTypeInputStream)
+            throws IOException {
+        try {
+            final URL url = this.artifactProvider.provide(artifact.getId());
+            if (url == null) {
+                return;
+            }
+            try (InputStream inputStream = url.openStream();
+                JarInputStream jarInputStream = new JarInputStream(inputStream)) {
+
+                JarEntry nextJarEntry;
+                while ((nextJarEntry = jarInputStream.getNextJarEntry()) != null) {
+                    final String name = nextJarEntry.getName();
+                    if (name.startsWith(META_INF_VAULT) && name.endsWith(".cnd")) {
+                        addRegisterNodeTypeInputStream.accept(new NamedByteArrayInputStream(jarInputStream.readAllBytes(), name));
+                    }
+                    jarInputStream.closeEntry();
+                }
+            }
+        } catch (RuntimeException ex) {
+            if(LOGGER.isDebugEnabled() || verbose){
+                LOGGER.warn("Error loading artifact from content package {} : {}", artifact.getId().toString(), ex.getMessage());
+            }
+        }
     }
 
     private void registerNodeTypes(final Session session, final NamedByteArrayInputStream nodeTypeDefinition) throws Exception {
@@ -208,5 +247,6 @@ public class RepoInitValidator {
             CndImporter.registerNodeTypes(reader, session, true);
         }
     }
+    
 
 }

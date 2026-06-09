@@ -80,7 +80,7 @@ public class RepoInitValidatorTest {
             } catch (final java.net.MalformedURLException e) {
                 throw new RuntimeException(e);
             }
-        });
+        }, true);
         
         validator.validate(feature);
     }

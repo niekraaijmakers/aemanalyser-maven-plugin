@@ -77,7 +77,7 @@ public class AemAnalyser {
     private static final String CONFIGURATION_ORIGINS = Configuration.CONFIGURATOR_PREFIX.concat(CONTENT_PACKAGE_ORIGINS);
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
-
+  
     private ArtifactProvider artifactProvider;
 
     private FeatureProvider featureProvider;
@@ -89,8 +89,14 @@ public class AemAnalyser {
     private Map<String, Map<String, String>> taskConfigurations;
     
     private boolean repoinitExecutionValidationEnabled;
-    
+    private final boolean repoInitValidationIsVerbose;
+
     public AemAnalyser() {
+        this(false);
+    }
+    
+    public AemAnalyser(boolean repoInitValidationIsVerbose) {
+        this.repoInitValidationIsVerbose = repoInitValidationIsVerbose;
         this.setIncludedTasks(new LinkedHashSet<>(Arrays.asList(DEFAULT_TASKS.split(","))));
         this.setIncludedUserTasks(new LinkedHashSet<>(Arrays.asList(DEFAULT_USER_TASKS.split(","))));
         this.setTaskConfigurations(new HashMap<>());
@@ -293,7 +299,7 @@ public class AemAnalyser {
         }
 
         if (this.repoinitExecutionValidationEnabled) {
-            this.validateRepoinitExecution(features, featureErrors);
+            this.validateRepoInitExecution(features, featureErrors);
         }
 
         logOutput(result.getErrors(), featureErrors, "errors");
@@ -302,9 +308,9 @@ public class AemAnalyser {
         return result;
     }
 
-    private void validateRepoinitExecution(final Collection<Feature> features,
+    private void validateRepoInitExecution(final Collection<Feature> features,
             final Map<String, List<AemAnalyserAnnotation>> featureErrors) {
-        final RepoInitValidator validator = new RepoInitValidator(this.getArtifactProvider());
+        final RepoInitValidator validator = new RepoInitValidator(this.getArtifactProvider(), repoInitValidationIsVerbose);
       
         for (final Feature feature : features) {
             final String classifier = feature.getId().getClassifier();
