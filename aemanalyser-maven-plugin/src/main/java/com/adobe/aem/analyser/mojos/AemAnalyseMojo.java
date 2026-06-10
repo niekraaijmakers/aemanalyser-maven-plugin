@@ -99,8 +99,8 @@ public class AemAnalyseMojo extends AbstractAnalyseMojo {
     @Parameter(defaultValue = "true", property = "aem.analyser.repoinit.validate")
     boolean repoInitValidation;
 
-    @Parameter(defaultValue = "false", property = "aem.analyser.repoinit.validate")
-    boolean repoInitValidationIsVerbose;
+    @Parameter(defaultValue = "${project.build.directory}/repoinit.txt", property = "aem.analyser.repoinit.outputFile")
+    File repoInitOutputFile;
 
     /**
      * Analyzes the given list of content package files.
@@ -338,7 +338,8 @@ public class AemAnalyseMojo extends AbstractAnalyseMojo {
     AemAnalyserResult analyseFeatures(final List<Feature> features,
             final ArtifactProvider artifactProvider) throws MojoFailureException, MojoExecutionException {
         try {
-            final AemAnalyser analyser = new AemAnalyser(this.repoInitValidationIsVerbose);
+            final AemAnalyser analyser = new AemAnalyser();
+            analyser.setRepoInitOutputFile(this.repoInitOutputFile);
             analyser.setArtifactProvider(artifactProvider);
             analyser.setIncludedTasks(this.getAnalyserTasks());
             analyser.setIncludedUserTasks(this.getAnalyserUserTasks());

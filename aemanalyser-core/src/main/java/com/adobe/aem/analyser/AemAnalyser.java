@@ -13,6 +13,7 @@ package com.adobe.aem.analyser;
 
 import static java.util.Collections.singletonMap;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -89,17 +90,16 @@ public class AemAnalyser {
     private Map<String, Map<String, String>> taskConfigurations;
     
     private boolean repoinitExecutionValidationEnabled;
-    private final boolean repoInitValidationIsVerbose;
+    private File repoInitOutputFile;
 
     public AemAnalyser() {
-        this(false);
-    }
-    
-    public AemAnalyser(boolean repoInitValidationIsVerbose) {
-        this.repoInitValidationIsVerbose = repoInitValidationIsVerbose;
         this.setIncludedTasks(new LinkedHashSet<>(Arrays.asList(DEFAULT_TASKS.split(","))));
         this.setIncludedUserTasks(new LinkedHashSet<>(Arrays.asList(DEFAULT_USER_TASKS.split(","))));
         this.setTaskConfigurations(new HashMap<>());
+    }
+
+    public void setRepoInitOutputFile(final File repoInitOutputFile) {
+        this.repoInitOutputFile = repoInitOutputFile;
     }
 
     /**
@@ -310,7 +310,10 @@ public class AemAnalyser {
 
     private void validateRepoInitExecution(final Collection<Feature> features,
             final Map<String, List<AemAnalyserAnnotation>> featureErrors) {
-        final RepoInitValidator validator = new RepoInitValidator(this.getArtifactProvider(), repoInitValidationIsVerbose);
+        final RepoInitValidator validator = new RepoInitValidator(this.getArtifactProvider());
+        if (this.repoInitOutputFile != null) {
+            validator.setOutputFile(this.repoInitOutputFile);
+        }
       
         for (final Feature feature : features) {
             final String classifier = feature.getId().getClassifier();

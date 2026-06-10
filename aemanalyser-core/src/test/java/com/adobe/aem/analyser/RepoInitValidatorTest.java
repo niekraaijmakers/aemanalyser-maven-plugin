@@ -11,18 +11,6 @@
  */
 package com.adobe.aem.analyser;
 
-import static org.junit.Assert.assertNotNull;
-
-import java.io.FileOutputStream;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.jar.JarEntry;
-import java.util.jar.JarOutputStream;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
 import org.apache.sling.feature.Artifact;
 import org.apache.sling.feature.ArtifactId;
 import org.apache.sling.feature.Extension;
@@ -35,6 +23,22 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.jar.JarEntry;
+import java.util.jar.JarOutputStream;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
 public class RepoInitValidatorTest {
 
     private static final ArtifactId NODETYPES_BUNDLE_ID = new ArtifactId("test.group", "nodetypes", "1.0.0", null, "jar");
@@ -43,6 +47,7 @@ public class RepoInitValidatorTest {
     @Rule
     public TemporaryFolder temporaryFolder = new TemporaryFolder();
 
+    private File repoInitLogFile;
     private Path nodetypesJar;
     private Path nodetypesContentPackage;
 
@@ -50,18 +55,30 @@ public class RepoInitValidatorTest {
     public void setUp() throws Exception {
         this.nodetypesJar = createNodeTypesJar();
         this.nodetypesContentPackage = createNodeTypesContentPackage();
+        this.repoInitLogFile = temporaryFolder.newFile("repoinit.txt");
     }
 
     @Test
     public void testSuccess() throws Exception {
         final URL repoinitUrl = getClass().getResource("/repoinit/success.txt");
         testRepoInitFile(repoinitUrl);
+
+        final String expectedText = Files.readString(Path.of(repoinitUrl.toURI()), StandardCharsets.UTF_8);
+        final String actualText = Files.readString(repoInitLogFile.toPath(), StandardCharsets.UTF_8);
+        assertEquals(expectedText, actualText);
     }
 
-    @Test(expected = RepoInitException.class)
+    @Test
     public void testFailureMissingCreatePath() throws Exception {
-        final URL repoinitUrl = getClass().getResource("/repoinit/fail.txt");
-        testRepoInitFile(repoinitUrl);
+        try {
+            final URL repoinitUrl = getClass().getResource("/repoinit/fail.txt");
+            testRepoInitFile(repoinitUrl);
+            fail("Expected an exception for invalid repoinit script");
+        } catch (Exception ex) {
+            assertNotNull(ex);
+            assertNotNull(ex.getCause());
+            assertTrue(ex.getCause() instanceof RepoInitException);
+        }
     }
 
     @Test
@@ -88,8 +105,9 @@ public class RepoInitValidatorTest {
             } catch (final java.net.MalformedURLException e) {
                 throw new RuntimeException(e);
             }
-        }, true);
-
+        });
+        
+        validator.setVerbose(true);
         validator.validate(feature);
     }
 
@@ -112,8 +130,9 @@ public class RepoInitValidatorTest {
             } catch (final java.net.MalformedURLException e) {
                 throw new RuntimeException(e);
             }
-        }, true);
-        
+        });
+        validator.setVerbose(true);
+        validator.setOutputFile(repoInitLogFile);
         validator.validate(feature);
     }
 

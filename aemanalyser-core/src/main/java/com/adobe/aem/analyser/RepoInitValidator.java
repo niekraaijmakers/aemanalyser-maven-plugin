@@ -1,5 +1,5 @@
 /*
-  Copyright 2020 Adobe. All rights reserved.
+  Copyright 2026 Adobe. All rights reserved.
   This file is licensed to you under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License. You may obtain a copy
   of the License at http://www.apache.org/licenses/LICENSE-2.0
@@ -12,12 +12,14 @@
 package com.adobe.aem.analyser;
 
 import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.io.StringReader;
 import java.net.URL;
+import java.nio.file.Files;
 import java.nio.charset.StandardCharsets;
 import java.util.Deque;
 import java.util.HashMap;
@@ -49,10 +51,15 @@ import org.apache.sling.feature.Extension;
 import org.apache.sling.feature.Feature;
 import org.apache.sling.feature.builder.ArtifactProvider;
 import org.apache.sling.jcr.repoinit.impl.JcrRepoInitOpsProcessorImpl;
+import org.apache.sling.jcr.repoinit.impl.RepoInitException;
 import org.apache.sling.repoinit.parser.impl.RepoInitParserImpl;
 import org.apache.sling.repoinit.parser.operations.Operation;
-import org.slf4j.Logger;
+
 import org.slf4j.LoggerFactory;
+
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+
 
 /**
  * Validates Repository Initialization statements from a feature.
@@ -67,22 +74,25 @@ public class RepoInitValidator {
             "groupsPath", "/home/groups",
             "usersPath", "/home/users"
     ));
-    private static final Logger LOGGER = LoggerFactory.getLogger(RepoInitValidator.class);
+    private static final Logger LOGGER = (Logger) LoggerFactory.getLogger(RepoInitValidator.class);
     private static final int RETRY_UPPER_LIMIT_MULTIPLICATION_FACTOR = 4;
+    public static final SimpleCredentials ADMIN_CREDENTIALS = new SimpleCredentials("admin", "admin".toCharArray());
 
     private final ArtifactProvider artifactProvider;
-    private final boolean verbose;
+    private boolean verbose = false;
+    private File repoInitOutputFile;
+
+  
     /**
      * Constructor
      * @param artifactProvider provides the maven artifacts
      */
-    public RepoInitValidator(ArtifactProvider artifactProvider, boolean verbose) {
+    public RepoInitValidator(ArtifactProvider artifactProvider) {
         this.artifactProvider = artifactProvider;
-      
+
         if (this.artifactProvider == null) {
             throw new IllegalStateException("ArtifactProvider must be set before validating repoinit");
         }
-        this.verbose = verbose;
     }
 
     /**
@@ -109,16 +119,32 @@ public class RepoInitValidator {
                         )
                         .build())
                 .createRepository();
-        final Session session = repository.login(new SimpleCredentials("admin", "admin".toCharArray()));
-        
-        try {
-            registerNodeTypes(session, feature);
+        final Session session = repository.login(ADMIN_CREDENTIALS);
 
+        try(LogLevelSuppressor logLevelSuppressor = new LogLevelSuppressor(Level.WARN, "org.apache.sling.jcr.repoinit")) {
+            registerNodeTypes(session, feature);
+            
             final RepoInitParserImpl repoInitParser = new RepoInitParserImpl(new StringReader(repoinitText));
             final List<Operation> operations = repoInitParser.parse();
             new JcrRepoInitOpsProcessorImpl().apply(session, operations);
             session.save();
-        } finally {
+
+            if (repoInitOutputFile != null) {
+                try {
+                    Files.writeString(repoInitOutputFile.toPath(), repoinitText);
+                } catch (IOException e) {
+                    LOGGER.warn("Failed to write repoinit statements to output file {}: {}", repoInitOutputFile, e.getMessage());
+                }
+            }
+
+        } catch (Exception ex){
+            if (repoInitOutputFile != null) {
+                throw new RepoInitException("Repoinit exception occurred. Look at the file " + repoInitOutputFile.getAbsolutePath() + " to see the full repoinit statement. ", ex);
+            }else{
+                LOGGER.warn("Repoinit statement: \n {}", repoinitText);
+                throw new RepoInitException("Repoinit exception occurred. Look at the full repoinit statement above.", ex);
+            }
+        } {
             session.logout();
             repository.shutdown();
         }
@@ -130,6 +156,11 @@ public class RepoInitValidator {
             return null;
         }
         return repoinit.getText();
+    }
+
+    public void setOutputFile(File repoInitOutputFile) {
+
+        this.repoInitOutputFile = repoInitOutputFile;
     }
 
     private static class NamedByteArrayInputStream extends ByteArrayInputStream {
@@ -173,7 +204,7 @@ public class RepoInitValidator {
 
         session.save();
     }
-    
+
     private Deque<NamedByteArrayInputStream> collectRegisterNodeTypesDequeue(Feature feature) throws IOException {
         final Deque<NamedByteArrayInputStream> nodeTypeInputStreamsDequeue = new LinkedList<>();
         for (final Artifact artifact : feature.getBundles()) {
@@ -198,8 +229,8 @@ public class RepoInitValidator {
                 return;
             }
             try (InputStream inputStream = url.openStream();
-                JarInputStream jarInputStream = new JarInputStream(inputStream)) {
-              
+                 JarInputStream jarInputStream = new JarInputStream(inputStream)) {
+
                 JarEntry nextJarEntry;
                 while ((nextJarEntry = jarInputStream.getNextJarEntry()) != null) {
                     final String name = nextJarEntry.getName();
@@ -214,7 +245,7 @@ public class RepoInitValidator {
                 LOGGER.warn("Error loading artifact from bundle {} : {}", artifact.getId().toString(), ex.getMessage());
             }
         }
-     
+
     }
 
     private boolean isVerboseLogging() {
@@ -229,7 +260,7 @@ public class RepoInitValidator {
                 return;
             }
             try (InputStream inputStream = url.openStream();
-                JarInputStream jarInputStream = new JarInputStream(inputStream)) {
+                 JarInputStream jarInputStream = new JarInputStream(inputStream)) {
 
                 JarEntry nextJarEntry;
                 while ((nextJarEntry = jarInputStream.getNextJarEntry()) != null) {
@@ -252,6 +283,12 @@ public class RepoInitValidator {
             CndImporter.registerNodeTypes(reader, session, true);
         }
     }
-    
 
+    public void setRepoInitOutputFile(File repoInitOutputFile) {
+        this.repoInitOutputFile = repoInitOutputFile;
+    }
+
+    public void setVerbose(boolean verbose) {
+        this.verbose = verbose;
+    }
 }
