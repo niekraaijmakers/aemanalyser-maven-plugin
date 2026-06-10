@@ -155,7 +155,7 @@ public class AemAnalyseMojo extends AbstractAnalyseMojo {
             final List<Feature> features = this.aggregateFeatureModels(sdkId, addons, compositeArtifactProvider);
 
             // 3. Phase : analyse features
-            final AemAnalyserResult result = this.analyseFeatures(features, compositeArtifactProvider);
+            final AemAnalyserResult result = this.analyseFeatures(features, compositeArtifactProvider, sdkId);
             additionalWarnings.stream().forEach(msg -> result.getWarnings().add(new AemAnalyserAnnotation(msg)));
             additionalErrors.stream().forEach(msg -> result.getErrors().add(new AemAnalyserAnnotation(msg)));
             return result;
@@ -336,7 +336,7 @@ public class AemAnalyseMojo extends AbstractAnalyseMojo {
      * @throws MojoExecutionException If something goes wrong
      */
     AemAnalyserResult analyseFeatures(final List<Feature> features,
-            final ArtifactProvider artifactProvider) throws MojoFailureException, MojoExecutionException {
+            final ArtifactProvider artifactProvider, ArtifactId sdkId) throws MojoFailureException, MojoExecutionException {
         try {
             final AemAnalyser analyser = new AemAnalyser();
             analyser.setRepoInitOutputFile(this.repoInitOutputFile);
@@ -346,6 +346,8 @@ public class AemAnalyseMojo extends AbstractAnalyseMojo {
             analyser.setTaskConfigurations(this.getAnalyserTaskConfigurations());
 
             analyser.setRepoInitExecutionValidationEnabled(this.repoInitValidation);
+            analyser.setSdkId(sdkId);
+            
             return analyser.analyse(features);            
         } catch ( final Exception e) {
             throw new MojoExecutionException("A fatal error occurred while analysing the features, see error cause:",

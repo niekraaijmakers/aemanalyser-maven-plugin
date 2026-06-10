@@ -136,6 +136,21 @@ public class RepoInitValidatorTest {
         validator.validate(feature);
     }
 
+    @Test
+    public void testCustomerRepoinit() throws Exception {
+        final String repoinitText = Files.readString(
+                Path.of("/Users/raaijmak/workspace/GitHub/raaijmak-15-p152255-uk37056/all/target/repoinit.txt"),
+                StandardCharsets.UTF_8);
+
+        final Feature feature = new Feature(new ArtifactId("test.group", "feature", "1.0.0", "aggregated-author", "slingosgifeature"));
+        final Extension repoinitExtension = new Extension(ExtensionType.TEXT, Extension.EXTENSION_NAME_REPOINIT, ExtensionState.REQUIRED);
+        repoinitExtension.setText(repoinitText);
+        feature.getExtensions().add(repoinitExtension);
+
+        final RepoInitValidator validator = new RepoInitValidator(id -> null);
+        validator.validate(feature);
+    }
+
     private Path createNodeTypesJar() throws Exception {
         final URL nodetypesUrl = getClass().getResource("/nodetypes");
         assertNotNull("nodetypes test resources must exist", nodetypesUrl);

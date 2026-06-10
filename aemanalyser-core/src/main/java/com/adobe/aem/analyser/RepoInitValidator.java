@@ -55,10 +55,8 @@ import org.apache.sling.jcr.repoinit.impl.RepoInitException;
 import org.apache.sling.repoinit.parser.impl.RepoInitParserImpl;
 import org.apache.sling.repoinit.parser.operations.Operation;
 
+import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import ch.qos.logback.classic.Level;
-import ch.qos.logback.classic.Logger;
 
 
 /**
@@ -74,7 +72,7 @@ public class RepoInitValidator {
             "groupsPath", "/home/groups",
             "usersPath", "/home/users"
     ));
-    private static final Logger LOGGER = (Logger) LoggerFactory.getLogger(RepoInitValidator.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(RepoInitValidator.class);
     private static final int RETRY_UPPER_LIMIT_MULTIPLICATION_FACTOR = 4;
     public static final SimpleCredentials ADMIN_CREDENTIALS = new SimpleCredentials("admin", "admin".toCharArray());
 
@@ -121,22 +119,22 @@ public class RepoInitValidator {
                 .createRepository();
         final Session session = repository.login(ADMIN_CREDENTIALS);
 
-        try(LogLevelSuppressor logLevelSuppressor = new LogLevelSuppressor(Level.WARN, "org.apache.sling.jcr.repoinit")) {
+        if (repoInitOutputFile != null) {
+            try {
+                Files.writeString(repoInitOutputFile.toPath(), repoinitText);
+            } catch (IOException e) {
+                LOGGER.warn("Failed to write repoinit statements to output file {}: {}", repoInitOutputFile, e.getMessage());
+            }
+        }
+        
+        try {
             registerNodeTypes(session, feature);
             
             final RepoInitParserImpl repoInitParser = new RepoInitParserImpl(new StringReader(repoinitText));
             final List<Operation> operations = repoInitParser.parse();
             new JcrRepoInitOpsProcessorImpl().apply(session, operations);
             session.save();
-
-            if (repoInitOutputFile != null) {
-                try {
-                    Files.writeString(repoInitOutputFile.toPath(), repoinitText);
-                } catch (IOException e) {
-                    LOGGER.warn("Failed to write repoinit statements to output file {}: {}", repoInitOutputFile, e.getMessage());
-                }
-            }
-
+            
         } catch (Exception ex){
             if (repoInitOutputFile != null) {
                 throw new RepoInitException("Repoinit exception occurred. Look at the file " + repoInitOutputFile.getAbsolutePath() + " to see the full repoinit statement. ", ex);

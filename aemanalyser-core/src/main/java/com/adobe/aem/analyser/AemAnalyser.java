@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.Set;
 
 import org.apache.sling.feature.Artifact;
+import org.apache.sling.feature.ArtifactId;
 import org.apache.sling.feature.Configuration;
 import org.apache.sling.feature.Extension;
 import org.apache.sling.feature.ExtensionType;
@@ -91,6 +92,9 @@ public class AemAnalyser {
     
     private boolean repoinitExecutionValidationEnabled;
     private File repoInitOutputFile;
+    
+    private static final ArtifactId MINIMUM_SDK_API_REPOINIT_VALIDATION = new ArtifactId("com.adobe.aem", "aem-sdk-api", "2026.5.25353.20260528T211800Z-260500", null, null);;
+    private ArtifactId sdkId;
 
     public AemAnalyser() {
         this.setIncludedTasks(new LinkedHashSet<>(Arrays.asList(DEFAULT_TASKS.split(","))));
@@ -296,11 +300,16 @@ public class AemAnalyser {
             for(final ConfigurationReport report : r.getConfigurationWarnings()) {
                 featureWarnings.computeIfAbsent(msgKey, key -> new ArrayList<>()).add(getConfigurationAnnotation(f, report));
             }
+
+            if (this.repoinitExecutionValidationEnabled && 
+                    this.sdkId.getOSGiVersion().compareTo( MINIMUM_SDK_API_REPOINIT_VALIDATION.getOSGiVersion() ) > 0 &&
+                    f.getId().getClassifier().startsWith(PREFIX)
+            ) {
+                this.validateRepoInitExecution(f, featureErrors);
+            }
         }
 
-        if (this.repoinitExecutionValidationEnabled) {
-            this.validateRepoInitExecution(features, featureErrors);
-        }
+      
 
         logOutput(result.getErrors(), featureErrors, "errors");
         logOutput(result.getWarnings(), featureWarnings, "warnings");
@@ -308,27 +317,22 @@ public class AemAnalyser {
         return result;
     }
 
-    private void validateRepoInitExecution(final Collection<Feature> features,
+    private void validateRepoInitExecution(final Feature feature,
             final Map<String, List<AemAnalyserAnnotation>> featureErrors) {
         final RepoInitValidator validator = new RepoInitValidator(this.getArtifactProvider());
         if (this.repoInitOutputFile != null) {
             validator.setOutputFile(this.repoInitOutputFile);
         }
-      
-        for (final Feature feature : features) {
-            final String classifier = feature.getId().getClassifier();
-            if (!this.checkFinalClassifier(classifier)) {
-                continue;
-            }
-            try {
-                this.logger.info("Validating repoinit execution for feature {}", feature.getId());
-                validator.validate(feature);
-            } catch (final Exception e) {
-                this.logger.error("Repoinit execution validation failed for feature {}", feature.getId(), e);
-                this.logSuppressedExceptionMessages(e);
-                featureErrors.computeIfAbsent(classifier, key -> new ArrayList<>())
-                        .add(new AemAnalyserAnnotation("Repoinit execution validation failed: ".concat(e.getMessage())));
-            }
+        
+        final String classifier = feature.getId().getClassifier();
+        try {
+            this.logger.info("Validating repoinit execution for feature {}", feature.getId());
+            validator.validate(feature);
+        } catch (final Exception e) {
+            this.logger.error("Repoinit execution validation failed for feature {}", feature.getId(), e);
+            this.logSuppressedExceptionMessages(e);
+            featureErrors.computeIfAbsent(classifier, key -> new ArrayList<>())
+                    .add(new AemAnalyserAnnotation("Repoinit execution validation failed: ".concat(e.getMessage())));
         }
     }
 
@@ -449,5 +453,9 @@ public class AemAnalyser {
                 m.stream().forEach(t -> output.add(t));
             }
         }
+    }
+    
+    public void setSdkId(final ArtifactId sdkId) {
+        this.sdkId = sdkId;
     }
 }
